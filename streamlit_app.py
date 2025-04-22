@@ -1,25 +1,35 @@
 # Import python packages
 import streamlit as st
-from snowflake.snowpark.context import get_active_session
-from snowflake.snowpark.functions import col,when_matched
+from snowflake.snowpark.functions import col
 # Write directly to the app
-st.title(f":cup_with_straw: Pending smoothie Orders:cup_with_straw:")
+st.title(f":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
 st.write(
-  """Orders that needed to be filled.
+  """Choose the fruit you want to create smoothie!
   """
 )
 
-session = get_active_session()
-my_dataframe = session.table("smoothies.public.orders").filter(col("ORDER_FILLED")==0).collect()
-editable_df = st.data_editor(my_dataframe)
+name_on_order = st.text_input("Name of Smoothie:")
+st.write("The Name on your smoothie will be:", name_on_order)
 
-submitted = st.button('submit')
+cnx = st.connection("snowflake")
+session = cnx.session()
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
+ingredients_list= st.multiselect(
+    "Choose up to 5 ingredients:",
+    my_dataframe,
+    max_selections=5
+)
 
-if submitted:
-    st.success("someone clicked the button.",icon="👍")
-    og_dataset = session.table("smoothies.public.orders")
-    edited_dataset = session.create_dataframe(editable_df)
-    og_dataset.merge(edited_dataset
-                     , (og_dataset['ORDER_UID'] == edited_dataset['ORDER_UID'])
-                     , [when_matched().update({'ORDER_FILLED': edited_dataset['ORDER_FILLED']})]
-                    )
+if ingredients_list:
+    ingredients_string = ''
+    for fruit_chosen in ingredients_list:
+        ingredients_string += fruit_chosen + ' '
+    #st.write(ingredients_string)
+    my_insert_stmt = """ insert into smoothies.public.orders(ingredients,name_on_order)
+            values ('""" + ingredients_string + """','"""+name_on_order+"""')"""
+    #st.write(my_insert_stmt)
+    #st.stop()
+    time_to_insert = st.button('Submit Order')
+    if time_to_insert:
+        session.sql(my_insert_stmt).collect()
+        st.success("Your Smoothie is ordered!", icon="✅")
